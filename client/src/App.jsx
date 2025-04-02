@@ -1,130 +1,137 @@
-import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+import { useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
+import axios from 'axios';
 
-// Move socket connection outside the component to prevent re-creation
-const socket = io("http://localhost:3000", {
-    reconnection: true, // Allow reconnection if disconnected
+const socket = io('http://localhost:3000', {
+  reconnection: true,
 });
 
 function App() {
-    const [message, setMessage] = useState("");
-    const [targetId, setTargetId] = useState("");
-    const [messages, setMessages] = useState([]);
-    const [socketId, setSocketId] = useState("");
-    const [roomId, setRoomId] = useState("");
+  const [message, setMessage] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [roomId, setRoomId] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [socketId, setSocketId] = useState('');
 
-    useEffect(() => {
-        socket.on("connect", () => {
-            console.log("Connected", socket.id);
-            setSocketId(socket.id); // Set the socket ID once connected
-        });
+  useEffect(() => {
+    socket.on('connect', () => {
+      console.log("Connected", socket.id);
+      setSocketId(socket.id);
+    });
 
-        socket.on("privateMessage", (data) => {
-            setMessages((prev) => [
-                ...prev,
-                `Private message from ${data.sender}: ${data.message}`,
-            ]);
-        });
+    socket.on('privateMessage', (data) => {
+      setMessages((prev) => [...prev, `Private message from ${data.sender}: ${data.message}`]);
+    });
 
-        socket.on("broadcastMessage", (data) => {
-            setMessages((pre) => [
-                ...pre,
-                `Broadcast from ${data.sender}: ${data.message}`,
-            ]);
-        });
+    socket.on('broadcastMessage', (data) => {
+      setMessages((prev) => [...prev, `Broadcast from ${data.sender}: ${data.message}`]);
+    });
 
-        socket.on("roomMessage", (data) => {
-            setMessages((pre) => [
-                ...pre,
-                `Room message from ${data.sender}: ${data.message}`,
-            ]);
-        });
+    socket.on('roomMessage', (data) => {
+      setMessages((prev) => [...prev, `Room message from ${data.sender} to ${data.to}: ${data.message}`]);
+    });
 
-        return () => {
-            socket.off("connect");
-            socket.off("privateMessage");
-            socket.off("broadcastMessage");
-            socket.off("roomMessage");
-        };
-    }, []);
-
-    const setRoomIdData = (e) => {
-        e.preventDefault();
-        if (roomId) {
-            socket.emit("joinRoom", { roomId });
-            // console.log(`socket ${socket.id} is in room id : ${roomId}`);
-        }
+    return () => {
+      socket.off('connect');
+      socket.off('privateMessage');
+      socket.off('broadcastMessage');
+      socket.off('roomMessage');
     };
+  }, []);
 
-    const sendPrivateMessage = (e) => {
-        e.preventDefault(); // Prevent form submission from refreshing the page
-        if (targetId && message) {
-            // console.log("Sending to:", targetId, "Message:", message);
-            socket.emit("sendPrivateMessage", {
-                targetSocketId: targetId,
-                message,
-            });
-            setMessages((prev) => [...prev, `You to ${targetId}: ${message}`]);
-            setMessage("");
-        }
-    };
+  const joinRoom = (e) => {
+    e.preventDefault();
+    if (roomId) {
+      socket.emit('joinRoom', {roomId});
+    }
+  };
 
-    //send broadcast message to all the other clients
-    const sendBroadcastMessage = (e) => {
-        e.preventDefault();
-        if (message) {
-            // console.log("Broadcasting", message);
-            socket.emit("sendBroadcastMessage", { message });
-            setMessages((pre) => [...pre, `You broadcast: ${message}`]);
-        }
-    };
-    //send message to particular room
-    const sendRoomMessage = (e) => {
-        e.preventDefault();
-        if (roomId && message) {
-            (`Sending to room ${roomId} message : ${message}`);
-            socket.emit("sendRoomMessage", { roomId, message });
-            setMessages((pre) => [...pre, `You to room ${roomId}: ${message}`]);
-            setMessage("");
-        }
-    };
+  const sendPrivateMessage = async (e) => {
+    e.preventDefault();
+    if (targetId && message) {
+      try {
+        await axios.post('http://localhost:3000/privateMsg', {
+          socketId: socketId,
+          targetSocketId: targetId,
+          message,
+        });
+        setMessages((prev) => [...prev, `You to ${targetId}: ${message}`]);
+        setMessage('');
+      } catch (err) {
+        console.error('Error sending private message:', err);
+      }
+    }
+  };
 
-    return (
-        <form onSubmit={(e) => e.preventDefault()}>
-            <input
-                type="text"
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                placeholder="Target Socket ID"
-            />
-            <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type a message"
-            />
-            <button onClick={sendPrivateMessage}>Send Private</button>
-            <button onClick={sendBroadcastMessage}>Broadcast</button>
-            <button onClick={sendRoomMessage}>Send Room Message</button>
-            <p>Your Socket ID: {socketId}</p>
-            <div>
-                {messages.map((msg, index) => (
-                    <p key={index}>{msg}</p>
-                ))}
-            </div>
+  const sendBroadcastMessage = async (e) => {
+    e.preventDefault();
+    if (message) {
+      try {
+        await axios.post('http://localhost:3000/broadcastMsg', {
+          socketId: socketId,
+          message,
+        });
+        setMessages((prev) => [...prev, `You broadcast: ${message}`]);
+        setMessage('');
+      } catch (err) {
+        console.error('Error sending broadcast message:', err);
+      }
+    }
+  };
 
-            <br />
-            <br />
+  const sendRoomMessage = async (e) => {
+    e.preventDefault();
+    if (roomId && message) {
+      try {
+        await axios.post('http://localhost:3000/roomMsg', {
+          socketId: socketId,
+          roomId,
+          message,
+        });
+        setMessages((prev) => [...prev, `You to room ${roomId}: ${message}`]);
+        setMessage('');
+      } catch (err) {
+        console.error('Error sending room message:', err);
+      }
+    }
+  };
 
-            <input
-                type="text"
-                placeholder="Enter room id"
-                onChange={(e) => setRoomId(e.target.value)}
-                value={roomId}
-            />
-            <button onClick={setRoomIdData}>Set Room id</button>
-        </form>
-    );
+  return (
+    <form onSubmit={(e) => e.preventDefault()}>
+      <div>
+        <input
+          type="text"
+          value={roomId}
+          onChange={(e) => setRoomId(e.target.value)}
+          placeholder="Enter Room ID"
+        />
+        <button onClick={joinRoom}>Join Room</button>
+      </div>
+      <div>
+        <input
+          type="text"
+          value={targetId}
+          onChange={(e) => setTargetId(e.target.value)}
+          placeholder="Target Socket ID"
+        />
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Type a message"
+        />
+        <button onClick={sendPrivateMessage}>Send Private</button>
+        <button onClick={sendBroadcastMessage}>Broadcast</button>
+        <button onClick={sendRoomMessage}>Send Room</button>
+      </div>
+      <p>Your Socket ID: {socketId}</p>
+      <div>
+        {messages.map((msg, index) => (
+          <p key={index}>{msg}</p>
+        ))}
+      </div>
+    </form>
+  );
 }
 
 export default App;
